@@ -22,7 +22,7 @@ Usage:
  The QSIM macro is called with keyword parameters.
  The arguments may be listed within parentheses in any order, separated by commas. For example:
 
-   %qsim(var=k, freq=freq, dist=binomial);
+   %qsim(ntask=10000, nserv=6, iatdist=exponential(0.04), servdist=exponential(0.007), seed=-1)
 
 
 ==Parameters:
