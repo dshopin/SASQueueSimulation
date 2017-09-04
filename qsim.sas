@@ -1,4 +1,3 @@
-100
 /*-------------------------------------------------------------------*
            *    Name: qsim.sas                                        	      *
            *   Title: Simulation of queueing systems							  *
