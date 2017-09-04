@@ -356,12 +356,3 @@ options nomprint;
 
 %mend qsim;
 
-
-/*Example*/
-%qsim(
-  ntask=10000
- ,nserv=6
- ,iatdist=exponential(0.04)
- ,servdist=exponential(0.007)
- ,seed=-1
-)
