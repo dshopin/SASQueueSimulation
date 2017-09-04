@@ -1,1 +1,2 @@
-/*This macro simulates queueing system with arbitrary distributions of interarrival and service times and number of servers*/
+This is a macro taht simulates queueing system with arbitrary distributions of interarrival and service times and number of servers.
+It produces some graphical output, calculated metrics and a few datasets allowing further analysis.
