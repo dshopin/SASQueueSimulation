@@ -52,18 +52,40 @@ Usage:
  ,iatdist=
  ,servdist=
  ,seed=-1
-);
+)
+/ minoperator
+;
 
-options mprint;
+options mprint symbolgen;
+/*Exclude:
+Cauchy
+Normal 
+T
+
+Checks:
+Erlang - only pos integers
+Geometric, Binomial, Bernoulli - p between 0 and 1
+Geometric, Binomial, Hyper - n, N, R only nonneg integers
+Hyper - N>=R, N>=n
+NegBin  - k=1,2,...; 0<=p<=1
+Triangular 
+
+
+Transformations:
+Exponential - if x~Exp(1) then kx~Exp(1/k)
+Gamma - if x~Gamma(alpha,beta) then cx~Gamma(alpha, beta/c)  
+Lognormal - use normal with mu and sigma
+Triangular
+Uniform
+
+*/
+
+
 /*extract distribution and parameters for IAT*/
 %let iatdistname=%substr(%upcase(&iatdist),1,%eval(%index(&iatdist,%str(%())-1));
 %let firstbrac = %index(&iatdist,%str(%());
 %let lastbrac = %index(&iatdist,%str(%)));
 %let iatparms=%substr(%upcase(&iatdist), %eval(&firstbrac+1),%eval(&lastbrac-&firstbrac-1));
-
-%do i=1 %to %sysfunc(countw("&iatparms",%str(,)));
-	%let iatparm&i=%scan(%nrbquote(&iatparms),&i,%str(,));
-%end;
 
 
 /*extract distribution and parameters for Service time*/
@@ -71,6 +93,26 @@ options mprint;
 %let firstbrac = %index(&servdist,%str(%());
 %let lastbrac = %index(&servdist,%str(%)));
 %let servparms=%substr(%upcase(&servdist), %eval(&firstbrac+1),%eval(&lastbrac-&firstbrac-1));
+
+
+
+%if not(%substr(&iatdistname,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GAUS GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB)
+%then %do;
+	%put ERROR: IATDIST argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GAUSSIAN, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
+	%abort;
+%end;
+
+%if not(%substr(&servdistname,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GAUS GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB)
+%then %do;
+	%put ERROR: SERVDIST argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GAUSSIAN, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
+	%abort;
+%end;
+
+%do i=1 %to %sysfunc(countw("&iatparms",%str(,)));
+	%let iatparm&i=%scan(%nrbquote(&iatparms),&i,%str(,));
+%end;
+
+
 
 %do i=1 %to %sysfunc(countw("&servparms",%str(,)));
 	%let servparm&i=%scan(%nrbquote(&servparms),&i,%str(,));
@@ -384,6 +426,6 @@ run;
 title;
 proc datasets nolist; delete pctl; run;
 
-options nomprint;
+options nomprint nosymbolgen;
 
 %mend qsim;
