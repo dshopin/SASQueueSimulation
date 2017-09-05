@@ -95,28 +95,62 @@ Uniform
 %let servparms=%substr(%upcase(&servdist), %eval(&firstbrac+1),%eval(&lastbrac-&firstbrac-1));
 
 
-
-%if not(%substr(&iatdistname,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GAUS GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB)
+/*Checking distribution names correctness*/
+%if not(%substr(&iatdistname,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB)
 %then %do;
-	%put ERROR: IATDIST argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GAUSSIAN, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
+	%put ERROR: IATDIST argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
 	%abort;
 %end;
 
 %if not(%substr(&servdistname,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GAUS GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB)
 %then %do;
-	%put ERROR: SERVDIST argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GAUSSIAN, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
+	%put ERROR: SERVDIST argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
 	%abort;
 %end;
 
+
+%if %substr(&iatdistname,1,4)=BERN %then %let iatdistname=BERNOULLI;
+%else %if %substr(&iatdistname,1,4)=BINO %then %let iatdistname=BINOMIAL;
+%else %if %substr(&iatdistname,1,4)=CHIS %then %let iatdistname=CHISQUARE;
+%else %if %substr(&iatdistname,1,4)=ERLA %then %let iatdistname=ERLANG;
+%else %if %substr(&iatdistname,1,4)=EXPO %then %let iatdistname=EXPONENTIAL;
+%else %if %substr(&iatdistname,1,4)=GAMM %then %let iatdistname=GAMMA;
+%else %if %substr(&iatdistname,1,4)=GEOM %then %let iatdistname=GEOMETRIC;
+%else %if %substr(&iatdistname,1,4)=HYPE %then %let iatdistname=HYPERGEOMETRIC;
+%else %if %substr(&iatdistname,1,4)=LOGN %then %let iatdistname=LOGNORMAL;
+%else %if %substr(&iatdistname,1,4)=NEGB %then %let iatdistname=NEGBINOMIAL;
+%else %if %substr(&iatdistname,1,4)=POIS %then %let iatdistname=POISSON;
+%else %if %substr(&iatdistname,1,4)=TABL %then %let iatdistname=TABLE;
+%else %if %substr(&iatdistname,1,4)=TRIA %then %let iatdistname=TRIANGLE;
+%else %if %substr(&iatdistname,1,4)=UNIF %then %let iatdistname=UNIFORM;
+%else %if %substr(&iatdistname,1,4)=WEIB %then %let iatdistname=WEIBULL;
+
+/*Extract individual parameters of distributions*/
 %do i=1 %to %sysfunc(countw("&iatparms",%str(,)));
 	%let iatparm&i=%scan(%nrbquote(&iatparms),&i,%str(,));
 %end;
 
-
-
 %do i=1 %to %sysfunc(countw("&servparms",%str(,)));
 	%let servparm&i=%scan(%nrbquote(&servparms),&i,%str(,));
 %end;
+
+
+/*Checks if distribution parameters are valid. Extra parameters are ignored*/
+%if %sysfunc(countw("&iatparms",%str(,)))<3 and  &iatdistname in (HYPERGEOMETRIC TRIANGULAR)
+	or %sysfunc(countw("&iatparms",%str(,)))<2 and &iatdistname in (BETA BINOMIAL ERLANG F GAMMA LOGNORMAL NEGBINOMIAL UNIFORM WEIBULL)
+	or %sysfunc(countw("&iatparms",%str(,)))<1
+%then %do;
+	%put ERROR: Not enough parameters for IATDIST; %abort;
+%end;
+
+%if %sysfunc(countw("&servparms",%str(,)))<3 and  &servdistname in (HYPERGEOMETRIC TRIANGULAR)
+	or %sysfunc(countw("&servparms",%str(,)))<2 and &servdistname in (BETA BINOMIAL ERLANG F GAMMA LOGNORMAL NEGBINOMIAL UNIFORM WEIBULL)
+	or %sysfunc(countw("&servparms",%str(,)))<1
+%then %do;
+	%put ERROR: Not enough parameters for SERVDIST; %abort;
+%end;
+
+
 
 
 data 	simqueue(keep=event clock)
