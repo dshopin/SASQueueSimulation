@@ -1,4 +1,18 @@
-/*23*/
+/*Branch from main source file to change the way how internal macro clock works.
+
+Initially it was iterating by discrete steps and checking every time if some event happens: 
+inqueueing new task, releasing a server or dequeueing a task and transferring it to an available server
+
+It seems unnecessary - we can just jump every time to the time of the nearest event.
+
+Also in the former case there was a rounding problem - if arrival or service rates were too high, 
+all generated intervals would be rounded to 1. In the latter case we can use exact (fractional) clock values.
+*/
+
+
+
+
+
 
 /*-------------------------------------------------------------------*
            *    Name: qsim.sas                                        	      *
@@ -116,17 +130,14 @@ data 	simqueue(keep=event clock)
 	%if &iatdistname=PARETO %then %do;
 		U = rand("Uniform");
 		IAT = - &iatparm2/&iatparm1 * (U**&iatparm1 - 1);
-		IAT = ceil(IAT);
 		next_task = clock + IAT;
 	%end;
 	%else %if &iatdistname=EXPONENTIAL %then %do;
 		IAT = rand("&iatdistname") / &iatparm1;
-		IAT = ceil(IAT);
 		next_task = clock + IAT;
 	%end;
 	%else %do;
 		IAT = rand("&iatdistname", &iatparms);
-		IAT = ceil(IAT);
 		next_task = clock + IAT;
 	%end;
 
@@ -135,57 +146,42 @@ data 	simqueue(keep=event clock)
 	%if &servdistname=PARETO %then %do;
 		U = rand("Uniform");
 		next_service_time = - &servparm2/&servparm1 * (U**&servparm1 - 1);
-		next_service_time = ceil(next_service_time);
 	%end;
 	%else %if &servdistname=EXPONENTIAL %then %do;
 		next_service_time = rand("&servdistname") / &servparm1;
-		next_service_time = ceil(next_service_time);
 	%end;
 	%else %do;
 		next_service_time = rand("&servdistname", &servparms);
-		next_service_time = ceil(next_service_time);
 	%end;
 
 /*		put 'Call #' next_task_id 'will arrive at ' next_task 'and its duration ' next_service_time;*/
+/*		put 'Current clock = ' clock //;*/
 
-		do clock=clock to next_task-1;
-			/*releasing servers*/
-			rc = iS.first();
-			do while(rc = 0);
-				if release_time = clock then do;
-					event = 'release';
-					output simservers;
-					event = 'end';
-					output simtasks;
-					/*update server hash record*/
-					idle_time = 0;
-					release_time = .;
-					task_id = .;
-					rc0=S.replace();
-/*					put 'Call #' task_id 'finished by server #' server_id 'at ' clock; */
-				end;
-				rc=iS.next();
-			end;
 
-			/*dequeueing*/
-			do while(Q.num_items > 0);
 
-				/*check if there are available servers and who's idlest*/
-				rc = iS.first();
-				idlest = .;
+
+		do until(clock=next_task); /*start of loop for events before arrival of the next task*/
+
+			 /********************************************************/
+			/*Transferring tasks from the queue to available servers*/
+		   /********************************************************/
+
+			do while(Q.num_items > 0); /*only if there is at least one task in the queue*/
+				rc = iS.first();/*check if there are available servers and who's the idlest*/
 				maxidle = .;
+				maxidleid = .;
 				do while(rc = 0);
-					if idle_time > maxidle then do;
+					if (idle_time^=. and maxidle^=. and idle_time > maxidle) or (idle_time^=. and maxidle=.) then do;
 						maxidle = idle_time;
-						idlest = server_id;
+						maxidleid = server_id;
 					end;
 					rc = iS.next();
 				end;
-				server_id = idlest;
-				
+				server_id = maxidleid;				
 				rc = S.find();
 				if rc = 0 then do;
-					/*dequeue*/
+
+					/*dequeue task*/
 					iQ.first();
 					event = 'dequeue';
 					output simqueue;
@@ -201,28 +197,70 @@ data 	simqueue(keep=event clock)
 					idle_time = .;
 					release_time = clock + service_time;
 					rc0 = S.replace();
-
-/*					put 'Call #' task_id 'dequeued and transferred to server #' server_id 'at ' clock;*/
 				end;
 				else leave;
 			end;
+
+
+			 /************************************************************/
+			/*search for the closest server release before the next task*/
+		   /************************************************************/
+			rc = iS.first();
+			nextrelease = .;
+			nextreleaseid = .;
+			do while(rc = 0);
+				if (release_time^=. and nextrelease^=. and release_time < nextrelease) or (release_time^=. and nextrelease=.) then do;
+					nextrelease = release_time;
+					nextreleaseid = server_id;
+				end;
+				rc = iS.next();
+			end;
+			server_id = nextreleaseid;				
+			rc = S.find();
+			if rc = 0 and release_time < next_task then do;
+				jump = release_time - clock; /*we need to store this jump to update servers idle time below*/ 
+				clock = release_time; /*jumping to the next release time*/
+			end;
+			else do; /*if no releases before the next task then jump to the next task*/ 
+				jump = next_task - clock;
+				clock = next_task; 
+			end;
+/*			put 'Next release at ' nextrelease;*/
+/*			put 'Jumped by ' jump ' to ' clock//;*/
+
+			/*releasing server(s)*/
+			rc = iS.first();
+			do while(rc = 0);
+				if release_time = clock then do;
+					event = 'release';
+					output simservers;
+					event = 'end';
+					output simtasks;
+					/*update server hash record*/
+					idle_time = 0;
+					release_time = .;
+					task_id = .;
+					rc0=S.replace();
+				end;
+				rc=iS.next();
+			end;
+
 
 			/*update idle times for servers*/
 			rc = iS.first();
 			do while(rc = 0);
 				if release_time = . then do;
-					idle_time + 1;
+					idle_time + jump;
 					rc0 = S.replace();
 				end;
 				rc = iS.next();
 			end;
-		end;
+		end; /*end of loop for events before arrival of the next task*/
 
 		/*processing new call*/
 		task_id = next_task_id;
 		event = 'enqueue';
 		output simqueue;
-/*		put 'Call #' task_id ' inqueued at ' clock;*/
 
 		event = 'arrival';
 		output simtasks;
@@ -256,9 +294,17 @@ data simqueue;
 	set simqueue;
 	change = (event='enqueue') - (event='dequeue');
 run;
-proc freq data=simqueue noprint;	
-	tables clock / out=simqueue(drop=percent);
-	weight change;
+/*proc freq data=simqueue noprint;	*/
+/*	tables clock / out=simqueue(drop=percent);*/
+/*	weight change;*/
+/*run;*/
+data simqueue;
+	set simqueue;
+	by clock;
+	if FIRST.clock then count=0;
+	count+change;
+	if LAST.clock then output;
+	keep clock count;
 run;
 data simqueue;
 	set simqueue;
@@ -357,13 +403,3 @@ proc datasets nolist; delete pctl; run;
 options nomprint;
 
 %mend qsim;
-
-
-/*Example*/
-%qsim(
-  ntask=10000
- ,nserv=6
- ,iatdist=exponential(0.04)
- ,servdist=exponential(0.007)
- ,seed=-1
-)
