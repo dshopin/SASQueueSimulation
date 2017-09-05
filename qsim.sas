@@ -1,19 +1,3 @@
-/*Branch from main source file to change the way how internal macro clock works.
-
-Initially it was iterating by discrete steps and checking every time if some event happens: 
-inqueueing new task, releasing a server or dequeueing a task and transferring it to an available server
-
-It seems unnecessary - we can just jump every time to the time of the nearest event.
-
-Also in the former case there was a rounding problem - if arrival or service rates were too high, 
-all generated intervals would be rounded to 1. In the latter case we can use exact (fractional) clock values.
-*/
-
-
-
-
-
-
 /*-------------------------------------------------------------------*
            *    Name: qsim.sas                                        	      *
            *   Title: Simulation of queueing systems							  *
