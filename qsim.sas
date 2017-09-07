@@ -34,68 +34,97 @@ Usage:
 
 
 * IATDIST=  Specifies the name of the distribution of interarrival time and corresponding parameters
-			in the form: DISTRIBUTION_NAME(par1, par2, ...). Parameters must be specified in an order
-			defined for RAND() function
-			(see http://support.sas.com/documentation/cdl/en/lefunctionsref/69762/HTML/default/viewer.htm#p0fpeei0opypg8n1b06qe4r040lv.htm)
+			in the form: DISTRIBUTION_NAME(par1, par2, ...). Parameters must be specified as following:
+			BERNOULLI(p)
+			BETA(a,b)
+			BINOMIAL(p,n)
+			CHISQUARE(df)
+			ERLANG(shape, scale)
+			EXPONENTIAL(lambda)
+			F(n,d)
+			GAMMA(shape, scale)
+			GEOMETRIC(p)
+			HYPERGEOMETRIC(N,R,n)
+			LOGNORMAL(mu, sigma)
+			NEGBINOMIAL(p,k)
+			PARETO(shape, scale)
+			POISSON(lambda)
+			TABLE(p1,p2,...,pn)
+			TRIANGULAR(min, max, mode)
+			UNIFORM(min, max)
+			WEIBULL(shape, scale)
+
 			No default.
 
-* SERVDIST=  Same as for DISTARR
+* SERVDIST=  Specifies the name of the distribution of service time and corresponding parameters same as  IATDIST
 
-* SEED=		Seed value for random number generations. Default=-1 (generation seeds from the system clock)
+* SEED=		Seed value for random number generations. Default=-1 (generating seeds from the system clock)
 
  =*/
 
 
-%macro qsim(
-  ntask=1000
- ,nserv=1
- ,iatdist=
- ,servdist=
- ,seed=-1
-)
-;
+%macro qsim(ntask=1000,nserv=1,iatdist=,servdist=,seed=-1);
 
-options mprint symbolgen;
-/*Exclude:
-Cauchy
-Normal 
-T
-
-Checks:
-Erlang - only pos integers
-Geometric, Binomial, Bernoulli - p between 0 and 1
-Geometric, Binomial, Hyper - n, N, R only nonneg integers
-Hyper - N>=R, N>=n
-NegBin  - k=1,2,...; 0<=p<=1
-Triangular 
+options mprint symbolgen mlogic;
 
 
+/*Macro to output error message if IATDIST or SERVDIST are invalid*/
+%macro distinvalmsg;
+	%put ERROR: %upcase(&key) argument must have form Distribution_Name(param-1, ..., param-n);
+	%put ERROR: %upcase(&key) = &&&key;
+	%put NOTE: Valid distribution names are BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGBINOMIAL, PARETO, POISSON, TABLE, TRIANGULAR, UNIFORM, WEIBULL;
+	%abort;
+%mend distinvalmsg;
 
-*/
+
+/*Macro to generate various random variables*/
+%macro randgen(key=, varname=);
+	%if &&&key.name=PARETO %then %do;
+		U = rand("Uniform"); /*Pareto is not supported by RAND(), so we use inverse transform sampling*/
+		&varname = -  &&&key.parm2/ &&&key.parm1 * (U** &&&key.parm1 - 1);
+	%end;
+
+	/*Some functions are supported by RAND() in standard form only. Shift and scale them*/
+	%else %if &&&key.name=EXPONENTIAL %then
+		&varname = rand("EXPONENTIAL") / &&&key.parm1; /*If x~Exp(1) then x/lambda ~ Exp(lambda)*/
+
+	%else %if &&&key.name=LOGNORMAL %then /*if x~N(mu,var) then exp(x)~Lognorm(mu,var)*/
+		&varname = exp(rand("NORMAL",  &&&key.parm1,  &&&key.parm2));
+
+	%else %if &&&key.name = GAMMA %then /*if x~Gamma(shape,1) then scale*x~Gamma(shape, scale) */
+		&varname = rand("GAMMA",  &&&key.parm1) *  &&&key.parm2;
+
+	%else %if &&&key.name = ERLANG %then /*if x~Erlang(shape,1) then scale*x~Gamma(shape, scale) */
+		&varname = rand("ERLANG",  &&&key.parm1) *  &&&key.parm2;
+
+	%else %if &&&key.name=TRIANGLE %then /*if x~Tri(0,1,(mode-min)/(max-min)) then a+(b-a)*x~Tri(min, max, mode) */
+		&varname = &key.parm1 + ( &&&key.parm2- &&&key.parm1)*rand("TRIANGLE",( &&&key.parm3- &&&key.parm1)/( &&&key.parm2- &&&key.parm1));
+
+	%else %if &&&key.name=UNIFORM %then /*if x~U(0,1) then a+(b-a)*x~U(min, max) */
+		&varname =  &&&key.parm1 + ( &&&key.parm2- &&&key.parm1)*rand("UNIFORM");
+
+	%else &varname = rand("&&&key.name", &&&key.parms);;
+%mend randgen;
+
+
 
 /*Macro for pre-processing IATDIST and SERVDIST keywords*/
 %macro distproc(key) / minoperator;
-
 	/*Extract distribution and parameters for IAT*/
 	%global &key.name &key.parms;
 	%let firstbracket = %index(&&&key,%str(%());
 	%let lastbracket = %index(&&&key,%str(%)));
 
+	/*Check the structure of IATDIST and SERVDIST*/
+	%if &firstbracket < 5 or %eval(&lastbracket - &firstbracket)<2 %then %distinvalmsg;
+
 	%let &key.name = %upcase(%substr(&&&key,1,%eval(&firstbracket-1)));
+	%put substr=%substr(&&&key, %eval(&firstbracket+1),%eval(&lastbracket-&firstbracket-1));
 	%let &key.parms=%substr(&&&key, %eval(&firstbracket+1),%eval(&lastbracket-&firstbracket-1));
 
-	/*Checking distribution names correctness*/
+	/*Check the names of IATDIST and SERVDIST*/
 	%if not(%substr(&&&key.name,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB PARE)
-	%then %do;
-		%put ERROR: %upcase(&key) argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, PARETO, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
-		%abort;
-	%end;
-
-	/*Extract individual parameters*/
-	%do i=1 %to %sysfunc(countw("&&&key.parms",%str(,)));
-		%global &key.parm&i;
-		%let &key.parm&i=%scan(%bquote(&&&key.parms),&i,%str(,));
-	%end;
+		%then %distinvalmsg;
 
 	/*unify names*/
 	%if %substr(&&&key.name,1,4)=BERN %then %let &key.name=BERNOULLI;
@@ -115,7 +144,13 @@ Triangular
 	%else %if %substr(&&&key.name,1,4)=WEIB %then %let &key.name=WEIBULL;
 	%else %if %substr(&&&key.name,1,4)=PARE %then %let &key.name=PARETO;
 
-	/*Checks if number of pameters is valid. Extra parameters are ignored*/
+	/*Extract individual parameters*/
+	%do i=1 %to %sysfunc(countw("&&&key.parms",%str(,)));
+		%global &key.parm&i;
+		%let &key.parm&i=%scan(%bquote(&&&key.parms),&i,%str(,));
+	%end;
+
+	/*Checks if number of parameters is valid. Extra parameters are ignored*/
 	%if %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<3 and  &&&key.name in (HYPERGEOMETRIC TRIANGLE)
 		or %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<2 and &&&key.name in (BETA BINOMIAL ERLANG F GAMMA LOGNORMAL NEGBINOMIAL UNIFORM WEIBULL)
 		or %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<1
@@ -135,33 +170,6 @@ Triangular
 %mend distproc;
 %distproc(IATDIST)
 %distproc(SERVDIST)
-
-
-/*Macro to generate various random variables*/
-%macro randgen(key=, varname=);
-	%if &&&key.name=PARETO %then %do;
-		U = rand("Uniform"); /*Pareto is not supported by RAND(), so we use inverse transform sampling*/
-		&varname = -  &&&key.parm2/ &&&key.parm1 * (U** &&&key.parm1 - 1);
-	%end;
-	/*Some functions are supported by RAND() in standard form only. Shift and scale them*/
-	%else %if &&&key.name=EXPONENTIAL %then
-		&varname = rand("EXPONENTIAL") / &&&key.parm1; /*If x~Exp(1) then x/lambda ~ Exp(lambda)*/
-
-	%else %if &&&key.name=LOGNORMAL %then /*if x~N(mu,var) then exp(x)~Lognorm(mu,var)*/
-		&varname = exp(rand("NORMAL",  &&&key.parm1,  &&&key.parm2));
-
-	%else %if &&&key.name=GAMMA %then /*if x~Gamma(shape,1) then scale*x~Gamma(shape, scale) */
-		&varname = rand("GAMMA",  &&&key.parm1) *  &&&key.parm2;
-
-	%else %if &&&key.name=TRIANGLE %then /*if x~Tri(0,1,(mode-min)/(max-min)) then a+(b-a)*x~Tri(min, max, mode) */
-		&varname = &key.parm1 + ( &&&key.parm2- &&&key.parm1)*rand("TRIANGLE",( &&&key.parm3- &&&key.parm1)/( &&&key.parm2- &&&key.parm1));
-
-	%else %if &&&key.name=UNIFORM %then /*if x~U(0,1) then a+(b-a)*x~U(min, max) */
-		&varname =  &&&key.parm1 + ( &&&key.parm2- &&&key.parm1)*rand("UNIFORM");
-
-	%else &varname = rand("&&&key.name", &&&key.parms);;
-%mend randgen;
-
 
 
 
@@ -201,7 +209,6 @@ data 	simqueue(keep=event clock)
 
 		/*Generate interarrival time for the next call*/
 		%randgen(key=IATDIST, varname=IAT)
-
 		next_task = clock + IAT;
 
 		/*Generate service time for the next call*/
@@ -343,10 +350,7 @@ data simqueue;
 	set simqueue;
 	change = (event='enqueue') - (event='dequeue');
 run;
-/*proc freq data=simqueue noprint;	*/
-/*	tables clock / out=simqueue(drop=percent);*/
-/*	weight change;*/
-/*run;*/
+
 data simqueue;
 	set simqueue;
 	by clock;
@@ -449,6 +453,6 @@ run;
 title;
 proc datasets nolist; delete pctl; run;
 
-options nomprint nosymbolgen;
+options nomprint nosymbolgen nomlogic;
 
 %mend qsim;
