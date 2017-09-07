@@ -381,6 +381,7 @@ data _null_;
 	    / @10 "Service time distribution: &servdistname (&servdistparms)"
 		/ @10 "Number of servers: &nserv"
 		/ @10 "Number of tasks: &ntask"
+		/ @10 "Seed: &seed"
 		// @10 "Interarrival time, mean: &iat_mean"
 		/ @10 "Interarrival rate(lambda): %sysevalf(1/&iat_mean)"
 		/ @10 "Service time, mean: &service_mean"
@@ -388,7 +389,7 @@ data _null_;
 		/ @10 "Traffic intensity (ro): %sysevalf(&service_mean/(&iat_mean*&nserv))"
 		/ @10 "Queue length, mean (Lq): &L_mean"
 		/ @10 "Waiting time, mean (Wq): &wait_mean"
-		/ @10 "Calculated queue length by Little's Law (lambda*Wq): %sysevalf(%sysevalf(1/&iat_mean)*&wait_mean)"
+		/ @10 "Calculated queue length from Little's Law (lambda*Wq): %sysevalf(%sysevalf(1/&iat_mean)*&wait_mean)"
 ;
 run;
 title;
@@ -401,19 +402,17 @@ data outstat;
 	service_mean=&service_mean;
 	mu=%sysevalf(1/&service_mean);
 	ro=%sysevalf(&service_mean/(&iat_mean*&nserv));
-	IAT_est=&iat_mean;
-	Ws_est=service_mean;
-	Lq_est=&L_mean;
-	Wq_est=&wait_mean;
+	IAT_mean=&iat_mean;
+	Lq=&L_mean;
+	Wq=&wait_mean;
 	label
 		nserv="Number of servers"
 		ntask="Number of tasks"
-		IAT_est="Interarrival time estimated, mean"
+		IAT_mean="Interarrival time, mean"
 		lambda="Interarrival rate (lambda)"
 		service_mean="Service time, mean"
 		mu="Service rate (mu)"
 		ro="Traffic intensity (ro)"
-		Ws_est="Service time estimated, mean (Ws)"
 		Lq_est="Queue length estimated, mean (Lq)"
 		Wq_est="Waiting time estimated, mean (Wq)";
 run;
@@ -431,7 +430,15 @@ data _null_;
 	call symputx("P99", P99);
 run;
 
+proc sgplot data=simtasks;
+	title 'Interarrival Time Distribution';
+	histogram iat;
+run;
 
+proc sgplot data=simtasks;
+	title 'Service Time Distribution';
+	histogram service_time;
+run;
 
 proc sgplot data=simqueue;
 	title 'Instantaneous Queue';
