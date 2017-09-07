@@ -115,12 +115,21 @@ Triangular
 	%else %if %substr(&&&key.name,1,4)=WEIB %then %let &key.name=WEIBULL;
 	%else %if %substr(&&&key.name,1,4)=PARE %then %let &key.name=PARETO;
 
-	/*Checks if distribution parameters are valid. Extra parameters are ignored*/
+	/*Checks if number of pameters is valid. Extra parameters are ignored*/
 	%if %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<3 and  &&&key.name in (HYPERGEOMETRIC TRIANGLE)
 		or %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<2 and &&&key.name in (BETA BINOMIAL ERLANG F GAMMA LOGNORMAL NEGBINOMIAL UNIFORM WEIBULL)
 		or %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<1
 	%then %do;
 		%put ERROR: Not enough parameters for &&&key.name distribution; %abort;
+	%end;
+
+	/*Check if parameters are valid for some distributions by testing the function*/
+	data _null_;
+		%randgen(key=&key, varname=rnum);
+		call symputx("rnum",rnum);
+	run;
+	%if &rnum=. %then %do;
+		%put ERROR: Invalid parameters for &&&key.name distribution; %abort;
 	%end;
 
 %mend distproc;
@@ -191,12 +200,12 @@ data 	simqueue(keep=event clock)
 	do next_task_id = 1 to &ntask;
 
 		/*Generate interarrival time for the next call*/
-		%randgen(key=IATDIST, varname=IAT);
+		%randgen(key=IATDIST, varname=IAT)
 
 		next_task = clock + IAT;
 
 		/*Generate service time for the next call*/
-		%randgen(key=SERVDIST, varname=next_service_time);
+		%randgen(key=SERVDIST, varname=next_service_time)
 
 
 
