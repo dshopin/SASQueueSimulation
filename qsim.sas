@@ -53,7 +53,6 @@ Usage:
  ,servdist=
  ,seed=-1
 )
-/ minoperator
 ;
 
 options mprint symbolgen;
@@ -71,88 +70,93 @@ NegBin  - k=1,2,...; 0<=p<=1
 Triangular 
 
 
-Transformations:
-Exponential - if x~Exp(1) then kx~Exp(1/k)
-Gamma - if x~Gamma(alpha,beta) then cx~Gamma(alpha, beta/c)  
-Lognormal - use normal with mu and sigma
-Triangular
-Uniform
 
 */
 
+/*Macro for pre-processing IATDIST and SERVDIST keywords*/
+%macro distproc(key) / minoperator;
 
-/*extract distribution and parameters for IAT*/
-%let iatdistname=%substr(%upcase(&iatdist),1,%eval(%index(&iatdist,%str(%())-1));
-%let firstbrac = %index(&iatdist,%str(%());
-%let lastbrac = %index(&iatdist,%str(%)));
-%let iatparms=%substr(%upcase(&iatdist), %eval(&firstbrac+1),%eval(&lastbrac-&firstbrac-1));
+	/*Extract distribution and parameters for IAT*/
+	%global &key.name &key.parms;
+	%let firstbracket = %index(&&&key,%str(%());
+	%let lastbracket = %index(&&&key,%str(%)));
 
+	%let &key.name = %upcase(%substr(&&&key,1,%eval(&firstbracket-1)));
+	%let &key.parms=%substr(&&&key, %eval(&firstbracket+1),%eval(&lastbracket-&firstbracket-1));
 
-/*extract distribution and parameters for Service time*/
-%let servdistname=%substr(%upcase(&servdist),1,%eval(%index(&servdist,%str(%())-1));
-%let firstbrac = %index(&servdist,%str(%());
-%let lastbrac = %index(&servdist,%str(%)));
-%let servparms=%substr(%upcase(&servdist), %eval(&firstbrac+1),%eval(&lastbrac-&firstbrac-1));
+	/*Checking distribution names correctness*/
+	%if not(%substr(&&&key.name,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB PARE)
+	%then %do;
+		%put ERROR: %upcase(&key) argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, PARETO, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
+		%abort;
+	%end;
 
+	/*Extract individual parameters*/
+	%do i=1 %to %sysfunc(countw("&&&key.parms",%str(,)));
+		%global &key.parm&i;
+		%let &key.parm&i=%scan(%bquote(&&&key.parms),&i,%str(,));
+	%end;
 
-/*Checking distribution names correctness*/
-%if not(%substr(&iatdistname,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB)
-%then %do;
-	%put ERROR: IATDIST argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
-	%abort;
-%end;
+	/*unify names*/
+	%if %substr(&&&key.name,1,4)=BERN %then %let &key.name=BERNOULLI;
+	%else %if %substr(&&&key.name,1,4)=BINO %then %let &key.name=BINOMIAL;
+	%else %if %substr(&&&key.name,1,4)=CHIS %then %let &key.name=CHISQUARE;
+	%else %if %substr(&&&key.name,1,4)=ERLA %then %let &key.name=ERLANG;
+	%else %if %substr(&&&key.name,1,4)=EXPO %then %let &key.name=EXPONENTIAL;
+	%else %if %substr(&&&key.name,1,4)=GAMM %then %let &key.name=GAMMA;
+	%else %if %substr(&&&key.name,1,4)=GEOM %then %let &key.name=GEOMETRIC;
+	%else %if %substr(&&&key.name,1,4)=HYPE %then %let &key.name=HYPERGEOMETRIC;
+	%else %if %substr(&&&key.name,1,4)=LOGN %then %let &key.name=LOGNORMAL;
+	%else %if %substr(&&&key.name,1,4)=NEGB %then %let &key.name=NEGBINOMIAL;
+	%else %if %substr(&&&key.name,1,4)=POIS %then %let &key.name=POISSON;
+	%else %if %substr(&&&key.name,1,4)=TABL %then %let &key.name=TABLE;
+	%else %if %substr(&&&key.name,1,4)=TRIA %then %let &key.name=TRIANGLE;
+	%else %if %substr(&&&key.name,1,4)=UNIF %then %let &key.name=UNIFORM;
+	%else %if %substr(&&&key.name,1,4)=WEIB %then %let &key.name=WEIBULL;
+	%else %if %substr(&&&key.name,1,4)=PARE %then %let &key.name=PARETO;
 
-%if not(%substr(&servdistname,1,4) in BERN BETA BINO CHIS ERLA EXPO F GAMM GAUS GEOM HYPE LOGN NEGB POIS TABL TRIA UNIF WEIB)
-%then %do;
-	%put ERROR: SERVDIST argument must be a character string with a value of BERNOULLI, BETA, BINOMIAL, CHISQUARE, ERLANG, EXPONENTIAL, F, GAMMA, GEOMETRIC, HYPERGEOMETRIC, LOGNORMAL, NEGB, POISSON, TABLE, TRIANGULAR, UNIFORM, or WEIBULL;
-	%abort;
-%end;
+	/*Checks if distribution parameters are valid. Extra parameters are ignored*/
+	%if %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<3 and  &&&key.name in (HYPERGEOMETRIC TRIANGLE)
+		or %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<2 and &&&key.name in (BETA BINOMIAL ERLANG F GAMMA LOGNORMAL NEGBINOMIAL UNIFORM WEIBULL)
+		or %sysfunc(countw(%bquote(&&&key.parms),%str(,)))<1
+	%then %do;
+		%put ERROR: Not enough parameters for &&&key.name distribution; %abort;
+	%end;
 
-
-%if %substr(&iatdistname,1,4)=BERN %then %let iatdistname=BERNOULLI;
-%else %if %substr(&iatdistname,1,4)=BINO %then %let iatdistname=BINOMIAL;
-%else %if %substr(&iatdistname,1,4)=CHIS %then %let iatdistname=CHISQUARE;
-%else %if %substr(&iatdistname,1,4)=ERLA %then %let iatdistname=ERLANG;
-%else %if %substr(&iatdistname,1,4)=EXPO %then %let iatdistname=EXPONENTIAL;
-%else %if %substr(&iatdistname,1,4)=GAMM %then %let iatdistname=GAMMA;
-%else %if %substr(&iatdistname,1,4)=GEOM %then %let iatdistname=GEOMETRIC;
-%else %if %substr(&iatdistname,1,4)=HYPE %then %let iatdistname=HYPERGEOMETRIC;
-%else %if %substr(&iatdistname,1,4)=LOGN %then %let iatdistname=LOGNORMAL;
-%else %if %substr(&iatdistname,1,4)=NEGB %then %let iatdistname=NEGBINOMIAL;
-%else %if %substr(&iatdistname,1,4)=POIS %then %let iatdistname=POISSON;
-%else %if %substr(&iatdistname,1,4)=TABL %then %let iatdistname=TABLE;
-%else %if %substr(&iatdistname,1,4)=TRIA %then %let iatdistname=TRIANGLE;
-%else %if %substr(&iatdistname,1,4)=UNIF %then %let iatdistname=UNIFORM;
-%else %if %substr(&iatdistname,1,4)=WEIB %then %let iatdistname=WEIBULL;
-
-/*Extract individual parameters of distributions*/
-%do i=1 %to %sysfunc(countw("&iatparms",%str(,)));
-	%let iatparm&i=%scan(%nrbquote(&iatparms),&i,%str(,));
-%end;
-
-%do i=1 %to %sysfunc(countw("&servparms",%str(,)));
-	%let servparm&i=%scan(%nrbquote(&servparms),&i,%str(,));
-%end;
-
-
-/*Checks if distribution parameters are valid. Extra parameters are ignored*/
-%if %sysfunc(countw("&iatparms",%str(,)))<3 and  &iatdistname in (HYPERGEOMETRIC TRIANGULAR)
-	or %sysfunc(countw("&iatparms",%str(,)))<2 and &iatdistname in (BETA BINOMIAL ERLANG F GAMMA LOGNORMAL NEGBINOMIAL UNIFORM WEIBULL)
-	or %sysfunc(countw("&iatparms",%str(,)))<1
-%then %do;
-	%put ERROR: Not enough parameters for IATDIST; %abort;
-%end;
-
-%if %sysfunc(countw("&servparms",%str(,)))<3 and  &servdistname in (HYPERGEOMETRIC TRIANGULAR)
-	or %sysfunc(countw("&servparms",%str(,)))<2 and &servdistname in (BETA BINOMIAL ERLANG F GAMMA LOGNORMAL NEGBINOMIAL UNIFORM WEIBULL)
-	or %sysfunc(countw("&servparms",%str(,)))<1
-%then %do;
-	%put ERROR: Not enough parameters for SERVDIST; %abort;
-%end;
+%mend distproc;
+%distproc(IATDIST)
+%distproc(SERVDIST)
 
 
+/*Macro to generate various random variables*/
+%macro randgen(key=, varname=);
+	%if &&&key.name=PARETO %then %do;
+		U = rand("Uniform"); /*Pareto is not supported by RAND(), so we use inverse transform sampling*/
+		&varname = -  &&&key.parm2/ &&&key.parm1 * (U** &&&key.parm1 - 1);
+	%end;
+	/*Some functions are supported by RAND() in standard form only. Shift and scale them*/
+	%else %if &&&key.name=EXPONENTIAL %then
+		&varname = rand("EXPONENTIAL") / &&&key.parm1; /*If x~Exp(1) then x/lambda ~ Exp(lambda)*/
+
+	%else %if &&&key.name=LOGNORMAL %then /*if x~N(mu,var) then exp(x)~Lognorm(mu,var)*/
+		&varname = exp(rand("NORMAL",  &&&key.parm1,  &&&key.parm2));
+
+	%else %if &&&key.name=GAMMA %then /*if x~Gamma(shape,1) then scale*x~Gamma(shape, scale) */
+		&varname = rand("GAMMA",  &&&key.parm1) *  &&&key.parm2;
+
+	%else %if &&&key.name=TRIANGLE %then /*if x~Tri(0,1,(mode-min)/(max-min)) then a+(b-a)*x~Tri(min, max, mode) */
+		&varname = &key.parm1 + ( &&&key.parm2- &&&key.parm1)*rand("TRIANGLE",( &&&key.parm3- &&&key.parm1)/( &&&key.parm2- &&&key.parm1));
+
+	%else %if &&&key.name=UNIFORM %then /*if x~U(0,1) then a+(b-a)*x~U(min, max) */
+		&varname =  &&&key.parm1 + ( &&&key.parm2- &&&key.parm1)*rand("UNIFORM");
+
+	%else &varname = rand("&&&key.name", &&&key.parms);;
+%mend randgen;
 
 
+
+
+/*Main simulation process*/
 data 	simqueue(keep=event clock)
 		simservers(keep=server_id event clock)
 		simtasks(keep=task_id event clock);
@@ -186,37 +190,13 @@ data 	simqueue(keep=event clock)
 	
 	do next_task_id = 1 to &ntask;
 
-		/*when next call*/
-	%if &iatdistname=PARETO %then %do;
-		U = rand("Uniform");
-		IAT = - &iatparm2/&iatparm1 * (U**&iatparm1 - 1);
+		/*Generate interarrival time for the next call*/
+		%randgen(key=IATDIST, varname=IAT);
+
 		next_task = clock + IAT;
-	%end;
-	%else %if &iatdistname=EXPONENTIAL %then %do;
-		IAT = rand("&iatdistname") / &iatparm1;
-		next_task = clock + IAT;
-	%end;
-	%else %do;
-		IAT = rand("&iatdistname", &iatparms);
-		next_task = clock + IAT;
-	%end;
 
-
-		/*generate service time*/
-	%if &servdistname=PARETO %then %do;
-		U = rand("Uniform");
-		next_service_time = - &servparm2/&servparm1 * (U**&servparm1 - 1);
-	%end;
-	%else %if &servdistname=EXPONENTIAL %then %do;
-		next_service_time = rand("&servdistname") / &servparm1;
-	%end;
-	%else %do;
-		next_service_time = rand("&servdistname", &servparms);
-	%end;
-
-/*		put 'Call #' next_task_id 'will arrive at ' next_task 'and its duration ' next_service_time;*/
-/*		put 'Current clock = ' clock //;*/
-
+		/*Generate service time for the next call*/
+		%randgen(key=SERVDIST, varname=next_service_time);
 
 
 
@@ -384,8 +364,8 @@ quit;
 data _null_;
 	file print;
 	title 'Simulation Results';
-	put / @10 "Interarrival time distribution: &iatdistname (&iatparms)"
-	    / @10 "Service time distribution: &servdistname (&servparms)"
+	put / @10 "Interarrival time distribution: &iatdistname (&iatdistparms)"
+	    / @10 "Service time distribution: &servdistname (&servdistparms)"
 		/ @10 "Number of servers: &nserv"
 		/ @10 "Number of tasks: &ntask"
 		// @10 "Interarrival time, mean: &iat_mean"
