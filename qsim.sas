@@ -131,7 +131,6 @@ Output:
 		%if &firstbracket < 5 or %eval(&lastbracket - &firstbracket)<2 %then %distinvalmsg;
 
 		%let &key.name = %upcase(%substr(&&&key,1,%eval(&firstbracket-1)));
-		%put substr=%substr(&&&key, %eval(&firstbracket+1),%eval(&lastbracket-&firstbracket-1));
 		%let &key.parms=%substr(&&&key, %eval(&firstbracket+1),%eval(&lastbracket-&firstbracket-1));
 
 		/*Check the names of IATDIST and SERVDIST*/
